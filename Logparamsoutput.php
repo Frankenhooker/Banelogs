@@ -25,11 +25,12 @@ tr:nth-child(even) {
 </html>
 <?php
 
+$path = "http://logs.banelings.de";
 $log = $_GET["log"];
 
 $public_api_key = "79558223d2ecf04879a75f44d61866d0";
 
-$log_code = str_replace("https://www.warcraftlogs.com/reports/","","$log");
+$log_code = str_replace("www.warcraftlogs.com/reports/","","$log");
 
 $json_log = file_get_contents("https://www.warcraftlogs.com:443/v1/report/fights/$log_code?api_key=$public_api_key");
 
@@ -55,7 +56,24 @@ foreach ($jsonIterator as $key => $val) {
         if ($boss != 0)
 		{
 			$difficulty = $val['difficulty'];
-			echo "<tr><td>$id</td><td><a href='http://127.0.0.1:8044/test/Bosse/$name.php?log=$log&fight=$id'>$name</a></td><td>$difficulty</td><tr>";
+			switch ($difficulty)
+			{
+				case "2":
+				$difficulty = "lfr";
+				break;
+				case "3":
+				$difficulty = "normal";
+				break;
+				case "4":
+				$difficulty = "heroic";
+				break;
+				case "5":
+				$difficulty = "mythic";
+				break;
+				default:
+				$difficulty = "nicht ermittelbar";
+			}
+			echo "<tr><td>$id</td><td><a href='$path/Bosse/$name.php?log=$log&fight=$id'>$name</a></td><td>$difficulty</td><tr>";
 		}
     } else if($key === "boss") {
         //echo "$key=$val\n ";
