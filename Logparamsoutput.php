@@ -6,45 +6,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
     <link href="https://fonts.googleapis.com/css?family=Raleway:400,700,900" rel="stylesheet"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
+    <link href="banelogs.css" rel="stylesheet">
 
     <title>Banelogs</title>
-<link href="banelogs.css" rel="stylesheet"></head>
+</head>
+
 <?php
 
+require_once __DIR__."/vendor/autoload.php";
+
+use phpFastCache\CacheManager;
+
+set_time_limit(100);
+CacheManager::setDefaultConfig(array(
+    "path" => __DIR__."/cache"
+));
+
 $path = "logs.banelings.de";
-$log = $_GET["log"];
-
 $public_api_key = "79558223d2ecf04879a75f44d61866d0";
+$log = $_GET["log"];
+$log_code = str_replace("https://www.warcraftlogs.com/reports/", "", "$log");
 
-$log_code = str_replace("https://www.warcraftlogs.com/reports/","","$log");
+$cache = CacheManager::getInstance('files');
 
-$json_log = file_get_contents("https://www.warcraftlogs.com:443/v1/report/fights/$log_code?api_key=$public_api_key");
+$cache_item = $cache->getItem($log_code);
+$json_log = $cache_item->get();
+
+if (is_null($json_log)) {
+    $json_log = file_get_contents("https://www.warcraftlogs.com:443/v1/report/fights/$log_code?api_key=$public_api_key");
+    $cache_item->set($json_log)->expiresAfter(300);
+    $cache->save($cache_item);
+}
 
 $data = json_decode($json_log, TRUE);
 
-function SearchHealpotSources($json_event_log, $fights_data){
-$array_sources = array("");
-$data_events = json_decode($json_event_log, TRUE);
-$array_events = $data_events['events'];
-$array_events_length = count($array_events);
-
-$array_friendlies = $fights_data['friendlies'];
-$array_friendlies_length = count($array_friendlies);
-
-for ($i = 0; $i < $array_events_length; $i++)
+function SearchHealpotSources($json_event_log, $fights_data)
 {
-	$userID	= $array_events[$i]['sourceID'];
-	for ($ii = 0; $ii < $array_friendlies_length; $ii++)
-	{
-		if ($userID === $array_friendlies[$ii]['id'])
-		{
-			$name = $array_friendlies[$ii]['name'];
-			$array_sources_new = array("$name");
-			$array_sources = array_merge($array_sources, $array_sources_new);
-		}
-	}
-}
-return $array_sources;
+    $array_sources = array("");
+    $data_events = json_decode($json_event_log, TRUE);
+    $array_events = $data_events['events'];
+    $array_events_length = count($array_events);
+
+    $array_friendlies = $fights_data['friendlies'];
+    $array_friendlies_length = count($array_friendlies);
+
+    for ($i = 0; $i < $array_events_length; $i++) {
+        $userID = $array_events[$i]['sourceID'];
+        for ($ii = 0; $ii < $array_friendlies_length; $ii++) {
+            if ($userID === $array_friendlies[$ii]['id']) {
+                $name = $array_friendlies[$ii]['name'];
+                $array_sources_new = array("$name");
+                $array_sources = array_merge($array_sources, $array_sources_new);
+            }
+        }
+    }
+    return $array_sources;
 }
 
 /*function SearchDamagepotSources($data_events){
@@ -103,76 +119,83 @@ $Damage_done_entangling_roots = "&pins=2%24Off%24%23244F4B%24damage%240%24108040
 
 $id = 0;
 $i = 1;
-echo '<body>';
+?>
+
+<body>
+
+<?php
 echo '<div class="container">
     <h1>Banelogs&trade;</h1>
     <div class="input-group">
         <input type="text" class="input search wide" placeholder="Search..."/>
     </div>';
 foreach ($jsonIterator as $key => $val) {
-    if(is_array($val))
-	{
-		$id   = $val['id'];
-		$boss = $val['boss'];
-		$name = $val['name'];
+    if (is_array($val)) {
+        $id = $val['id'];
+        $boss = $val['boss'];
+        $name = $val['name'];
 
-        if ($boss != 0)
-		{
-			$difficulty = $val['difficulty'];
-			$time_start = $val['start_time'];
-			$time_end   = $val['end_time'];
-			$json_heal = file_get_contents("https://www.warcraftlogs.com:443/v1/report/events/$log_code?start=$time_start&end=$time_end&filter=$Pin_healing&api_key=$public_api_key");
-			$sources_healpot = SearchHealpotSources($json_heal, $data);
+        if ($boss != 0) {
+            $difficulty = $val['difficulty'];
+            $time_start = $val['start_time'];
+            $time_end = $val['end_time'];
 
-			switch ($name)
-			{
-				case "Elerethe Renferal":
-				$name = "Elerethe";
-				break;
-				case "Il'gynoth, The Heart of Corruption":
-				$name = "Ilgynoth";
-				break;
-				default:
-			}
-			switch ($difficulty)
-			{
-				case "2":
-				$difficulty = "lfr";
-				break;
-				case "3":
-				$difficulty = "normal";
-				break;
-				case "4":
-				$difficulty = "heroic";
-				break;
-				case "5":
-				$difficulty = "mythic";
-				break;
-				default:
-				$difficulty = "nicht ermittelbar";
-			}
+            $cache_item_heal = $cache->getItem($log_code.'heal'.$id);
+            $json_heal = $cache_item_heal->get();
 
-			echo "<div class='accordion'><header class='trigger'>$name ($difficulty)<div class='right'><button onclick='location.href=\"$log#fight=$id\"' class='button outline'>Show Log</button></div></header><main><div class='content'>";
+            if (is_null($json_heal)) {
+                $json_heal = file_get_contents("https://www.warcraftlogs.com:443/v1/report/events/$log_code?start=$time_start&end=$time_end&filter=$Pin_healing&api_key=$public_api_key");
+                $cache_item_heal->set($json_heal)->expiresAfter(300);
+                $cache->save($cache_item_heal);
+            }
 
-			switch ($name)
-			{
-				case "Ursoc":
-				echo "<TABLE BORDER='1' CELLPADDING='3' CELLSPACING='3'>
+            $sources_healpot = SearchHealpotSources($json_heal, $data);
+
+            switch ($name) {
+                case "Elerethe Renferal":
+                    $name = "Elerethe";
+                    break;
+                case "Il'gynoth, The Heart of Corruption":
+                    $name = "Ilgynoth";
+                    break;
+                default:
+            }
+            switch ($difficulty) {
+                case "2":
+                    $difficulty = "lfr";
+                    break;
+                case "3":
+                    $difficulty = "normal";
+                    break;
+                case "4":
+                    $difficulty = "heroic";
+                    break;
+                case "5":
+                    $difficulty = "mythic";
+                    break;
+                default:
+                    $difficulty = "nicht ermittelbar";
+            }
+
+            echo "<div class='accordion'><header class='trigger'>$name ($difficulty)<div class='right'><button onclick='location.href=\"$log#fight=$id\"' class='button outline'>Show Log</button></div></header><main><div class='content'>";
+
+            switch ($name) {
+                case "Ursoc":
+                    echo "<TABLE BORDER='1' CELLPADDING='3' CELLSPACING='3'>
 						<TD><a href='$log#fight=$id$Damage_taken_events_Momentum'>Wer hat den Charge abgefangen?</a></TD>
 						<TD><a href='$log#fight=$id$Damage_taken_events_rend_overwhelm'>Tank Debuff (Rend Flesh & Overwhelm)</a></TD>
 						<TD><a href='$log#fight=$id$Damage_taken_events_miasma'>Damage Taken Miasma(Heroic&Mythic)</a></TD></TABLE>";
-						echo "<TABLE><TR><TD>Defensive Pots:";
-						$sources_healpot_length = count($sources_healpot);
-						for ($ii = 0; $ii < $sources_healpot_length; $ii++)
-						{
-							$source_healpot = $sources_healpot[$ii];
-							echo "$source_healpot ";
-						}
-            echo "</TD></TR>";
-						echo "<TR><TD>Offensive Pots:</TD></TR></TABLE>";
-				break;
-				case "Ilgynoth":
-				echo "<TABLE BORDER='1' CELLPADDING='3' CELLSPACING='3'>
+                    echo "<TABLE><TR><TD>Defensive Pots:";
+                    $sources_healpot_length = count($sources_healpot);
+                    for ($ii = 0; $ii < $sources_healpot_length; $ii++) {
+                        $source_healpot = $sources_healpot[$ii];
+                        echo "$source_healpot ";
+                    }
+                    echo "</TD></TR>";
+                    echo "<TR><TD>Offensive Pots:</TD></TR></TABLE>";
+                    break;
+                case "Ilgynoth":
+                    echo "<TABLE BORDER='1' CELLPADDING='3' CELLSPACING='3'>
 						<TD><a href='$log#fight=$id$Damage_done_ilgynoth'>FocusDMG Il'gynoth</a></TD>
 						<TD><a href='$log#fight=$id$Damage_done_dominance_tentacle'>FocusDMG Dominanztentakel</a></TD>
 						<TD><a href='$log#fight=$id$Damage_done_death_glare'>FocusDMG Deathglare</a></TD>
@@ -184,46 +207,47 @@ foreach ($jsonIterator as $key => $val) {
 						<TD><a href='$log#fight=$id$Damage_taken_source_CursedBlood'>DMG Taken CursedBlood(Source)</a></TD>
 						<TD><a href='$log#fight=$id$Damage_taken_events_nightmare_explosion'>DMG Taken Nightmare Explosion</a></TD>
 						</TR>";
-						echo "<TABLE><TR><TD>Defensive Pots:";
-						$sources_healpot_length = count($sources_healpot);
-						for ($ii = 0; $ii < $sources_healpot_length; $ii++)
-						{
-							$source_healpot = $sources_healpot[$ii];
-							echo "$source_healpot ";
-						}
-						echo "</TD></TR>
+                    echo "<TABLE><TR><TD>Defensive Pots:";
+                    $sources_healpot_length = count($sources_healpot);
+                    for ($ii = 0; $ii < $sources_healpot_length; $ii++) {
+                        $source_healpot = $sources_healpot[$ii];
+                        echo "$source_healpot ";
+                    }
+                    echo "</TD></TR>
 						<TR><TD WIDTH='150'>Offensive Pots:</TD></TR>
 						</TABLE>";
-				break;
-				case "Cenarius":
-				echo "<TABLE BORDER='1' CELLPADDING='3' CELLSPACING='3'>
+                    break;
+                case "Cenarius":
+                    echo "<TABLE BORDER='1' CELLPADDING='3' CELLSPACING='3'>
 						<TD><a href='$log#fight=$id$Damage_taken_creeping_nightmare'>DMG Taken Creeping Nightmares</a></TD>
 						<TD><a href='$log#fight=$id$Damage_taken_events_rotten_breath'>DMG Taken RottenBreath</a></TD>
 						<TD><a href='$log#fight=$id$Damage_taken_events_dread_thorns'>DMG Taken DreadThorns</a></TD>
 						<TD><a href='$log#fight=$id$Damage_done_entangling_roots'>Focus DMG EntanglingRoots</a></TD>";
-						echo "<TABLE><TR><TD>Defensive Pots:";
-						$sources_healpot_length = count($sources_healpot);
-						for ($ii = 0; $ii < $sources_healpot_length; $ii++)
-						{
-							$source_healpot = $sources_healpot[$ii];
-							echo "$source_healpot ";
-						}
-						echo "</TD></TR>;
+                    echo "<TABLE><TR><TD>Defensive Pots:";
+                    $sources_healpot_length = count($sources_healpot);
+                    for ($ii = 0; $ii < $sources_healpot_length; $ii++) {
+                        $source_healpot = $sources_healpot[$ii];
+                        echo "$source_healpot ";
+                    }
+                    echo "</TD></TR>;
 						<TR><TD WIDTH='150'>Offensive Pots:</TD></TR>
 						</TABLE>";
-				break;
-				default:
-				echo "<tr data-expandable='expandable-$i'><td colspan='3'>More information soon...</td></tr>";
-			}
-			$i++;
-			echo '</div></main></div>';
-		}
-    } else if($key === "boss") {
+                    break;
+                default:
+                    echo "<tr data-expandable='expandable-$i'><td colspan='3'>More information soon...</td></tr>";
+            }
+            $i++;
+            echo '</div></main></div>';
+        }
+    } else if ($key === "boss") {
         //echo "$key=$val\n ";
     }
 }
 ?>
+
 </div>
+
 <script type="text/javascript" src="banelogs.js"></script>
+
 </body>
 </html>

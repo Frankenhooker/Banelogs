@@ -1,0 +1,6 @@
+{
+    "name": "banelogs",
+    "require": {
+        "phpFastCache/phpFastCache": "^5.0"
+    }
+}
